@@ -1,0 +1,24 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+*.parquet
+examples/demo_output/*.html
+examples/demo_output/*.csv
+examples/demo_output/summary.json
+data/cache/
+
+# web (Next.js) — belt-and-braces in addition to web/.gitignore
+web/node_modules/
+web/.next/
+web/.vercel/
+web/out/
+web/dist/
+**/node_modules/
+**/.next/
+**/.vercel/
+.vercel/

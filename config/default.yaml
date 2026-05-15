@@ -1,0 +1,86 @@
+market:
+  profile: india                      # india | us
+  base_currency: INR
+  unit_label: cr                      # display unit (1 cr = 1e7)
+  unit_value: 10000000.0
+  trading_days_per_year: 252
+
+universe:
+  name: nifty100_synthetic
+  size: 100
+  history_years: 5
+
+factors:
+  enabled: [momentum, value, quality, low_vol]
+  long_quantile: 0.20
+  short_quantile: 0.20
+  rebalance_freq: M                   # D | W | BW | M | Q (monthly default for India — STT eats higher freqs)
+  holding_days: 21                    # ~1 month
+  momentum:
+    lookback_days: 252
+    skip_days: 21
+  value:
+    metric: synthetic_pb
+  quality:
+    metric: synthetic_roe
+  low_vol:
+    window_days: 126
+
+costs:
+  spread:
+    method: corwin_schultz_with_fallback
+    floor_bps: 1.0
+    cap_bps: 200.0
+  impact:
+    model: almgren_chriss
+    coefficient: 0.20                 # k in σ·k·sqrt(Q/V)
+    nonlinear_threshold: 0.10
+    nonlinear_exponent: 0.6
+  commission_bps: 1.0
+  borrow:
+    base_bps: 50.0
+    short_squeeze_premium_bps: 200.0
+  india:
+    enable: true
+    stt_delivery_pct: 0.001           # 0.1%
+    stt_intraday_sell_pct: 0.00025    # 0.025%
+    stamp_pct: 0.00015                # 0.015% on buy
+    sebi_per_cr: 10.0                 # ₹10 per crore turnover
+    exchange_pct: 0.0000345           # 0.00345% NSE cash
+    gst_pct: 0.18                     # 18% on (brokerage + sebi + exchange)
+
+capacity:
+  aum_grid_units: [1, 2.5, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000]
+  base_aum_units: 10                  # 10cr base for scaling
+  participation_cap: 0.05
+  zones:
+    safe:    {min_net_ir: 0.50, max_exec_days: 3, max_participation: 0.03}
+    caution: {min_net_ir: 0.20, max_exec_days: 5, max_participation: 0.05}
+
+crowding:
+  weights:
+    valuation_spread: 0.20
+    alpha_decay: 0.20
+    short_interest: 0.15
+    comomentum: 0.15
+    holdings_overlap: 0.15
+    internal_footprint: 0.15
+  alert_thresholds:
+    score_red: 75
+    score_amber: 50
+
+stress:
+  spread_pct_quantile: 0.99
+  adv_pct_quantile: 0.25
+  vol_pct_quantile: 0.95
+  impact_multiplier: 1.5
+  borrow_premium_bps: 200.0
+  redemption_shock_pct: 0.30          # 30% AUM out in 5 days
+
+policy:
+  rebalance_candidates: [D, W, BW, M, Q]
+  buffer_candidates_bps: [0, 25, 50, 100, 200]
+  checkpoints_pct_of_safe: [0.50, 0.75, 0.90]
+
+reporting:
+  output_dir: examples/demo_output
