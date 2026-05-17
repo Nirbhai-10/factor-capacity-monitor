@@ -1,0 +1,112 @@
+[
+  {
+    "scenario": "single_drone",
+    "description": "Baseline: one RF-controlled quad ingress.",
+    "frames": 120,
+    "metrics": {
+      "scenario": "single_drone",
+      "t": 60.0,
+      "n_threats": 1,
+      "n_neutralized": 1,
+      "n_leaked": 0,
+      "leakage_rate": 0.0,
+      "detection_recall": 1.0,
+      "uas_precision": 1.0,
+      "mean_cycle_latency_ms": 1.2713658083328028,
+      "committed_cost": 54.0,
+      "sim_cost_per_kill": 54.0,
+      "active_sites": 7,
+      "audit_ok": true,
+      "audit_records": 7
+    },
+    "bytes": 145100
+  },
+  {
+    "scenario": "coordinated_formation",
+    "description": "8-ship coherent formation, single axis of attack.",
+    "frames": 140,
+    "metrics": {
+      "scenario": "coordinated_formation",
+      "t": 70.0,
+      "n_threats": 8,
+      "n_neutralized": 8,
+      "n_leaked": 0,
+      "leakage_rate": 0.0,
+      "detection_recall": 1.0,
+      "uas_precision": 1.0,
+      "mean_cycle_latency_ms": 1.6052294285681714,
+      "committed_cost": 450.0,
+      "sim_cost_per_kill": 56.2,
+      "active_sites": 7,
+      "audit_ok": true,
+      "audit_records": 51
+    },
+    "bytes": 212243
+  },
+  {
+    "scenario": "mixed_dark_saturation",
+    "description": "30-threat 3-axis coordinated raid (RF + dark) + 4 bird decoys.",
+    "frames": 160,
+    "metrics": {
+      "scenario": "mixed_dark_saturation",
+      "t": 80.0,
+      "n_threats": 30,
+      "n_neutralized": 30,
+      "n_leaked": 0,
+      "leakage_rate": 0.0,
+      "detection_recall": 1.0,
+      "uas_precision": 1.0,
+      "mean_cycle_latency_ms": 4.1263862124978345,
+      "committed_cost": 3666.0,
+      "sim_cost_per_kill": 122.2,
+      "active_sites": 7,
+      "audit_ok": true,
+      "audit_records": 187
+    },
+    "bytes": 419233
+  },
+  {
+    "scenario": "mothership_release",
+    "description": "RF-silent mothership ingress then 10-child quad release.",
+    "frames": 180,
+    "metrics": {
+      "scenario": "mothership_release",
+      "t": 90.0,
+      "n_threats": 11,
+      "n_neutralized": 11,
+      "n_leaked": 0,
+      "leakage_rate": 0.0,
+      "detection_recall": 1.0,
+      "uas_precision": 1.0,
+      "mean_cycle_latency_ms": 2.9865927111094,
+      "committed_cost": 6132.0,
+      "sim_cost_per_kill": 557.5,
+      "active_sites": 7,
+      "audit_ok": true,
+      "audit_records": 95
+    },
+    "bytes": 299037
+  },
+  {
+    "scenario": "thousand_swarm",
+    "description": "1000-drone mass raid for scaling validation.",
+    "frames": 30,
+    "metrics": {
+      "scenario": "thousand_swarm_1000",
+      "t": 60.0,
+      "n_threats": 1000,
+      "n_neutralized": 907,
+      "n_leaked": 0,
+      "leakage_rate": 0.0,
+      "detection_recall": 1.0,
+      "uas_precision": 1.0,
+      "mean_cycle_latency_ms": 571.5516709166689,
+      "committed_cost": 66510.0,
+      "sim_cost_per_kill": 73.3,
+      "active_sites": 7,
+      "audit_ok": true,
+      "audit_records": 6724
+    },
+    "bytes": 2385968
+  }
+]

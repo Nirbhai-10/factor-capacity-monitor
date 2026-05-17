@@ -12,6 +12,7 @@ import numpy as np
 from scipy.spatial import ConvexHull, cKDTree
 
 from ..schemas import ObjectClass, SwarmObject, Track
+from .threat_eval import evaluate
 
 
 def _dbscan(pts: np.ndarray, eps: float, min_samples: int) -> np.ndarray:
@@ -54,8 +55,9 @@ def _hull_xy(xy: np.ndarray) -> list[tuple[float, float]]:
         return [tuple(map(float, p)) for p in xy]
 
 
-def estimate_swarms(tracks: list[Track], t: float,
-                    eps: float = 360.0, min_samples: int = 2) -> list[SwarmObject]:
+def estimate_swarms(tracks: list[Track], t: float, eps: float = 360.0,
+                    min_samples: int = 2,
+                    lone_threshold: float = 0.45) -> list[SwarmObject]:
     cand = [tr for tr in tracks if tr.confirmed
             and tr.obj_class in (ObjectClass.UAS, ObjectClass.UNKNOWN)]
     if not cand:
@@ -105,12 +107,12 @@ def estimate_swarms(tracks: list[Track], t: float,
                        and med_sp > 12.0)
 
         n_mem = len(idx)
-        urgency = 0.0 if not np.isfinite(min_tti) else \
-            max(0.0, 1.0 - min_tti / 120.0)
+        # TEWA per-member threat (CPA/TBH/range/class), aggregated and
+        # amplified by swarm size + heading coherence
+        te = float(np.mean([evaluate(cand[i]).score for i in idx]))
         threat = float(np.clip(
-            0.28 * min(1.0, n_mem / 12.0) + 0.18 * coherence
-            + 0.16 * max(0.0, 1.0 - rng / 6000.0) + 0.20 * urgency
-            + 0.18 * cls_conf, 0, 1))
+            0.55 * te + 0.25 * min(1.0, n_mem / 12.0)
+            + 0.20 * coherence, 0, 1))
 
         swarms.append(SwarmObject(
             swarm_id=int(cid), t=t,
@@ -123,6 +125,30 @@ def estimate_swarms(tracks: list[Track], t: float,
             closing_speed=closing, min_time_to_impact=min_tti,
             median_time_to_impact=med_tti, has_mothership=has_mom,
             class_confidence=cls_conf, threat_level=threat))
+
+    # lone-wolf handling: DBSCAN noise points that are individually a
+    # credible threat (TEWA) are emitted as single-member objects so a
+    # single ingressing drone is still engaged (doctrinally TEWA scores
+    # single tracks, not only swarms).
+    sid = (max((s.swarm_id for s in swarms), default=-1)) + 1
+    for k in np.where(labels == -1)[0]:
+        tr = cand[k]
+        ts = evaluate(tr)
+        if tr.obj_class != ObjectClass.UAS or ts.score < lone_threshold:
+            continue
+        rr = float(np.hypot(tr.x, tr.y)) + 1e-6
+        closing = -(tr.x * tr.vx + tr.y * tr.vy) / rr
+        swarms.append(SwarmObject(
+            swarm_id=sid, t=t, member_track_ids=[tr.track_id],
+            centroid=(tr.x, tr.y, tr.z), hull_xy=[(tr.x, tr.y)],
+            n_members=1, coherence=0.0, formation_tightness=1.0,
+            axis_of_attack=(0.0, 0.0),
+            closing_speed=max(0.0, closing),
+            min_time_to_impact=(ts.tbh if np.isfinite(ts.tbh)
+                                else float("inf")),
+            median_time_to_impact=ts.tbh, has_mothership=False,
+            class_confidence=ts.p_uas, threat_level=ts.score))
+        sid += 1
 
     swarms.sort(key=lambda s: s.threat_level, reverse=True)
     return swarms

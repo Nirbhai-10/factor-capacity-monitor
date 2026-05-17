@@ -25,6 +25,7 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 from ..schemas import (EngagementOrder, EngagementState, SwarmObject, Track)
+from .auction import NEG, auction_assign
 
 _PKILL = {                       # effector_kind -> {class: base Pkill}
     "soft_kill_cyber": {"*": 0.95},
@@ -96,7 +97,7 @@ class EngagementManager:
     def __init__(self, effectors=None, *, mitigation_authorized=False,
                  require_human=True, auto_engage_tti=12.0,
                  engage_threat=0.30, flight_time=3.0, keepout_m=250.0,
-                 area_min_batch=3, audit=None):
+                 area_min_batch=3, auction_max=350, audit=None):
         self.effectors = effectors or default_effector_suite()
         self.mitigation_authorized = mitigation_authorized
         self.require_human = require_human
@@ -105,6 +106,7 @@ class EngagementManager:
         self.flight_time = flight_time
         self.keepout_m = keepout_m
         self.area_min_batch = area_min_batch
+        self.auction_max = auction_max
         self.audit = audit
         self._oid = 1
         self._busy: dict[int, _Active] = {}      # track_id -> active engagement
@@ -177,37 +179,64 @@ class EngagementManager:
                     cost += share
                 pool = [tr for tr in pool if tr.track_id not in engaged]
 
-        # 2) POINT effectors: greedy cheapest-sufficient assignment.
-        # Optimal here because the cheap effectors (cyber/laser) have
-        # effectively unbounded magazine, so only the capacity-limited
-        # ones (net) contend -> process by priority (closest first).
+        # 2) POINT effectors: optimal assignment via the Bertsekas auction
+        # algorithm (eps-scaling). At very large N it falls back to the
+        # priority-greedy (which is optimal here since the cheap effectors
+        # have unbounded magazine) to stay real-time.
         rem = sorted((tr for tr in targets if tr.track_id not in engaged),
                      key=lambda tr: rng_m[tr.track_id])
         point = [e for e in self.effectors if e.area_radius == 0]
-        for tr in rem:
-            rm = rng_m[tr.track_id]
-            in_keepout = rm < self.keepout_m
-            best, best_c, best_pk = None, 1e18, 0.0
-            for e in point:
-                if e.magazine <= 0 or not e.applicable(tr, rm):
-                    continue
-                if in_keepout and e.kind == "net_interceptor":
-                    continue
-                pk = e.pkill(tr, rm)
-                if pk <= 0.05:
-                    continue
-                c = e.unit_cost / pk + 0.01 * rm
-                if c < best_c:
-                    best, best_c, best_pk = e, c, pk
-            if best is None:
-                continue
-            best.magazine -= 1
+
+        def _commit(tr, e, pk):
+            e.magazine -= 1
             st = self._state_for(tti_of[tr.track_id])
             orders.append(self._mk_order(
-                t, sw_of, tr, best, best.unit_cost, best_pk, st,
-                f"{best.kind} point engage"))
+                t, sw_of, tr, e, e.unit_cost, pk, st,
+                f"{e.kind} point engage"))
             engaged.add(tr.track_id)
-            cost += best.unit_cost
+            return e.unit_cost
+
+        def _eval(tr, e):
+            rm = rng_m[tr.track_id]
+            if e.magazine <= 0 or not e.applicable(tr, rm):
+                return None
+            if rm < self.keepout_m and e.kind == "net_interceptor":
+                return None
+            pk = e.pkill(tr, rm)
+            if pk <= 0.05:
+                return None
+            return e.unit_cost / pk + 0.01 * rm, pk
+
+        if rem and 0 < len(rem) <= self.auction_max:
+            slots = []
+            for e in point:
+                slots += [e] * min(e.magazine, len(rem))
+            if slots:
+                B = np.full((len(rem), len(slots)), NEG)
+                pkm = {}
+                for i, tr in enumerate(rem):
+                    for j, e in enumerate(slots):
+                        ev = _eval(tr, e)
+                        if ev is not None:
+                            B[i, j] = -ev[0]
+                            pkm[(i, j)] = ev[1]
+                asg = auction_assign(B)
+                for i, j in enumerate(asg):
+                    if j < 0 or B[i, j] <= NEG:
+                        continue
+                    e = slots[j]
+                    if e.magazine <= 0:
+                        continue
+                    cost += _commit(rem[i], e, pkm[(i, j)])
+        else:
+            for tr in rem:
+                best, best_c, best_pk = None, 1e18, 0.0
+                for e in point:
+                    ev = _eval(tr, e)
+                    if ev is not None and ev[0] < best_c:
+                        best, best_c, best_pk = e, ev[0], ev[1]
+                if best is not None:
+                    cost += _commit(tr, best, best_pk)
 
         self.committed_total += cost
         return WTAResult(orders, cost, len(engaged))

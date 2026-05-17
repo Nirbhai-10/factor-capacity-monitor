@@ -25,3 +25,7 @@ jobs:
         run: aegis-sim coordinated_formation --kill-site radar-N@12
       - name: Smoke — offline COP render
         run: aegis-render coordinated_formation --no-gif
+      - name: Smoke — replay export (drives the Vercel dashboard)
+        run: aegis-export --scenario coordinated_formation
+      - name: Smoke — server health/metrics import
+        run: python -c "from aegis_mesh.server.app import app; print('ok')"

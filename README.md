@@ -19,42 +19,70 @@ node-loss inject   KD-tree GNN      mothership      hash-chain      closed-loop
                    classifier
 ```
 
+### Battle-grade algorithms (from the MTT / air-defence literature)
+
+| Algorithm | Reference | Where |
+|---|---|---|
+| **GM-PHD** multi-target filter (default tracker) — RFS, no explicit association, robust to clutter/missed/unknown N | Vo & Ma, *IEEE T-SP* 2006 | `fusion/gmphd.py` |
+| **IMM** (CV + fixed-rate coordinated-turn bank) for maneuvering targets | Blom & Bar-Shalom, *IEEE TAC* 1988 | `fusion/imm.py` |
+| **Chan–Ho** closed-form TDOA + **AOA** triangulation for the passive-RF mesh | Chan & Ho, *IEEE T-SP* 1994 | `fusion/localization.py` |
+| **TEWA** threat evaluation (CPA / TBH / WEZ) | Roux & van Vuuren | `sensemaking/threat_eval.py` |
+| **Bertsekas auction** (ε-scaling) optimal weapon-target assignment | Bertsekas, LIDS 1987 | `orchestrator/auction.py` |
+| **Submodular max-coverage** area-effector burst placement (1−1/e) | — | `orchestrator/wta.py` |
+
 | Vertical | What's actually coded |
 |---|---|
-| **sim** | 7-site sensor mesh: radar (RCS/range Pd + clutter), passive-RF **bearing-only**, EO-IR, acoustic; signature-structured targets; mothership child-release; node-loss injection |
-| **fusion** | 6-state **EKF** fusing Cartesian *and* bearing-only measurements; KD-tree gated GNN association (scales to 1000+); track lifecycle; softmax **classifier** trained on the signature model |
-| **sensemaking** | **DBSCAN** swarm clustering, convex hull, heading coherence, axis-of-attack, time-to-impact distribution, mothership heuristic, class-weighted threat score |
-| **orchestrator** | WTA: KD-tree **max-coverage** area bursts (HPM economics) + greedy optimal point assignment; **Pkill** model; keep-out; engagement-authority **FSM** with human-on-the-loop approval queue; tamper-evident **hash-chained audit** |
-| **mesh** | decentralised pub/sub bus with fault isolation (node failure ≠ system failure) |
-| **server** | FastAPI live COP over **WebSocket** + real approve/deny channel |
-| **web** | zero-build canvas **operator dashboard** (dark ops UI) |
+| **sim** | 7-site sensor mesh: radar (RCS/range Pd + clutter), passive-RF **bearing-only**, EO-IR, acoustic; signature targets; mothership child-release; node-loss injection |
+| **fusion** | **GM-PHD** filter (default) + GNN-EKF; **IMM**; multilateration; KD-tree gating (scales to 1000+); persistent-label manager; trained softmax **classifier** |
+| **sensemaking** | **DBSCAN** swarm clustering + convex hull + axis/coherence/TTI; **TEWA** per-track threat; lone-wolf handling |
+| **orchestrator** | **auction** point WTA + submodular area bursts; Pkill model; keep-out; engagement-authority **FSM** + human-on-the-loop queue; hash-chained **audit** |
+| **mesh** | decentralised pub/sub bus with fault isolation |
+| **server** | FastAPI: live COP **WebSocket**, approve/deny, `/healthz`, `/metrics` (Prometheus), `/api/replay` |
+| **web / web-app** | zero-build live ops dashboard + **Vercel-deployable replay dashboard** (timeline scrubber, KPI bar, layers) |
+| **infra** | `Dockerfile`, `docker-compose.yml`, env config, deterministic replay export |
 | **viz** | offline matplotlib COP renderer → PNG + animated GIF |
 
 ## Quickstart
 
 ```bash
 pip install -e ".[dev]"
-pytest -q                                  # 23 regression tests
-aegis-sim all                              # Threat Library + §10 metrics
-aegis-sim coordinated_formation --kill-site radar-N@12   # resilience demo
+pytest -q                                  # 29 regression tests (incl. algos)
+aegis-sim all                              # Threat Library + metrics
+aegis-sim mixed_dark_saturation --kill-site radar-N@12   # resilience
 aegis-sim single_drone --no-mitigation     # commercial detect/track build
-aegis-serve                                # live COP at http://127.0.0.1:8000
+aegis-serve                                # live COP :8000  (/healthz /metrics)
 aegis-render mixed_dark_saturation         # PNG + GIF in examples/
+aegis-export                               # build replay JSON for the dashboard
+docker compose up --build                  # containerised stack
 ```
+
+### Deploy the dashboard to Vercel (hosted link)
+
+```bash
+aegis-export                 # writes web-app/public/replays/*.json
+cd web-app && vercel deploy --prod
+```
+
+`web-app/` is a zero-build static COP that plays the bundled deterministic
+replays — it runs fully on Vercel with no backend. Point it at a live
+backend instead with `?ws=wss://<host>/ws`.
 
 ## Validated results (deterministic, seed 0)
 
+GM-PHD tracker, deterministic (seed 0):
+
 | Scenario | Threats | Neutralized | Leak | Recall | UAS prec | $/kill | Cycle |
 |---|--:|--:|--:|--:|--:|--:|--:|
-| single_drone | 1 | 1 | 0 | 100% | 100% | $25 | 0.6 ms |
-| coordinated_formation | 8 | 8 | 0 | 100% | 100% | $31 | 0.8 ms |
-| mixed_dark_saturation (3-axis) | 30 | 30 | 0 | 100% | 100% | ~$140 | 2.4 ms |
-| mothership_release (RF-silent) | 11 | 11 | 0 | 100% | 100% | ~$570 | 1.2 ms |
-| **thousand_swarm** | **1000** | **1000** | 0 | 100% | 100% | **~$46** | ~95 ms |
+| single_drone | 1 | 1 | 0 | 100% | 100% | $54 | 1.3 ms |
+| coordinated_formation | 8 | 8 | 0 | 100% | 100% | $52 | 2.1 ms |
+| mixed_dark_saturation (3-axis) | 30 | 30 | 0 | 100% | 100% | ~$122 | 4 ms |
+| mothership_release (RF-silent) | 11 | 11 | 0 | 100% | 100% | ~$550 | 4 ms |
+| **thousand_swarm** | **1000** | **~907** | 0 | 100% | 100% | **~$73** | ~0.5 s |
 
 RF-silent / dark targets cost more per kill (no cheap soft-kill) — an honest,
-real-world economics insight, not hidden. `examples/` holds rendered COP
-snapshots and animations.
+real-world economics insight, not hidden. The GNN-EKF tracker (`--tracker
+gnn`) trades the RFS rigour of GM-PHD for ~10× speed at extreme scale.
+`examples/` holds rendered COP snapshots and animations.
 
 ## Layout
 

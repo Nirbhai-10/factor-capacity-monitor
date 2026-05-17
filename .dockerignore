@@ -1,0 +1,9 @@
+.git
+legacy
+examples/*.gif
+**/__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+web-app/node_modules
+.venv

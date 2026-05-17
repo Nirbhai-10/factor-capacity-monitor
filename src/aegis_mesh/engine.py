@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .fusion.gmphd import GMPHDTracker
 from .fusion.tracker import Tracker
 from .mesh import EventBus
 from .orchestrator.audit import AuditLog
@@ -55,12 +56,13 @@ class Engine:
                  mitigation_authorized: bool = True, require_human: bool = False,
                  node_loss: dict[float, str] | None = None,
                  bus: EventBus | None = None, assoc_m: float = 200.0,
-                 leak_radius_m: float = 250.0):
+                 leak_radius_m: float = 250.0, tracker: str = "gmphd"):
         self.sc = scenario
         self.rng = np.random.default_rng(seed + 101)
         self.world = SimWorld(scenario, seed=seed)
         self.sites = default_site_layout()
-        self.tracker = Tracker()
+        self.tracker_kind = tracker
+        self.tracker = GMPHDTracker() if tracker == "gmphd" else Tracker()
         self.audit = AuditLog()
         self.mgr = EngagementManager(
             mitigation_authorized=mitigation_authorized,

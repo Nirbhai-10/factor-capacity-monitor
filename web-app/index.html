@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AEGIS-MESH · Counter-Swarm COP</title>
+<meta name="description" content="Battle-grade counter-swarm common operating
+ picture — GM-PHD fusion, IMM, TEWA, Bertsekas-auction weapon-target
+ assignment. Defensive demonstrator." />
+<link rel="stylesheet" href="/assets/style.css" />
+</head>
+<body>
+<header>
+  <div class="brand">AEGIS&#8209;MESH
+    <span>// counter-swarm common operating picture</span></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="conn"><span id="mode" class="pill">replay</span></div>
+</header>
+
+<div class="bar">
+  <select id="scenario" title="scenario"></select>
+  <button id="play">► PLAY</button>
+  <input type="range" id="scrub" min="0" max="100" value="0" />
+  <span id="clock" class="clock">t 0.0s</span>
+  <label class="spd">speed
+    <select id="speed">
+      <option>0.5</option><option selected>1</option>
+      <option>2</option><option>4</option><option>8</option>
+    </select></label>
+  <span class="layers" id="layers"></span>
+</div>
+
+<main>
+  <canvas id="cop"></canvas>
+  <aside id="side">
+    <section class="card"><h3>Scenario</h3>
+      <div id="desc" class="desc"></div></section>
+    <section class="card"><h3>Pipeline</h3>
+      <div id="pipe" class="pipe"></div></section>
+    <section class="card"><h3>Effectors</h3>
+      <div id="effectors"></div></section>
+    <section class="card"><h3>Engagement Log</h3>
+      <div id="log" class="log"></div></section>
+    <section class="card legend"><h3>Legend</h3><div id="legend"></div>
+    </section>
+  </aside>
+</main>
+<footer>
+  Defensive demonstrator · GM-PHD (Vo&amp;Ma 2006) · IMM (Blom&amp;Bar-Shalom)
+  · TDOA (Chan&amp;Ho 1994) · TEWA · Bertsekas auction ·
+  <span id="src">replay</span>
+</footer>
+<script src="/assets/app.js"></script>
+</body>
+</html>

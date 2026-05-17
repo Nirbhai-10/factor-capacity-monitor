@@ -25,6 +25,7 @@ dev = ["pytest>=7.4", "pytest-cov", "ruff>=0.1.9",
 aegis-sim = "aegis_mesh.cli:main"
 aegis-serve = "aegis_mesh.server.app:main"
 aegis-render = "aegis_mesh.viz.render:main"
+aegis-export = "aegis_mesh.replay:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
