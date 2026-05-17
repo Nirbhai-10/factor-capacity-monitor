@@ -19,5 +19,9 @@ jobs:
         run: ruff check src tests
       - name: Tests (regression metrics gated here)
         run: pytest -q
-      - name: Smoke (Threat Library end-to-end)
+      - name: Smoke — Threat Library end-to-end
         run: aegis-sim coordinated_formation
+      - name: Smoke — resilience (sensor node loss)
+        run: aegis-sim coordinated_formation --kill-site radar-N@12
+      - name: Smoke — offline COP render
+        run: aegis-render coordinated_formation --no-gif

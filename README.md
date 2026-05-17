@@ -4,49 +4,68 @@ A sensor- and effector-agnostic real-time autonomy + data layer for
 counter-swarm defense. The moat is the autonomy/data flywheel, not the
 hardware (see `PLAN.md`).
 
-> **Defensive only.** Read `SAFETY.md` first — it is a permanent,
-> non-negotiable project boundary. No offensive weaponization; red-team and
-> simulation target only our own synthetic range.
+> **Defensive only.** Read `SAFETY.md` first — a permanent, non-negotiable
+> project boundary. Red-team and simulation target only our own synthetic
+> range; no offensive weaponization.
 
-## What's here (Phase 0/1 reference slice)
+## End-to-end system (implemented, runnable, tested)
 
-A runnable, tested `sense -> fuse -> sensemake -> decide -> audit` loop driven
-by a synthetic multi-sensor swarm simulation:
+```
+SENSE ───────────► FUSE ──────────► SENSEMAKE ────► DECIDE ───────► EFFECT
+multi-site mesh    EKF tracker      DBSCAN swarm    WTA + auth      authority-gated
+radar / passiveRF  Cartesian +      intent, hull,   FSM, approval   simulated effect
+/ EO-IR / acoustic bearing-only     axis, TTI,      queue, audit    + Pkill model
+node-loss inject   KD-tree GNN      mothership      hash-chain      closed-loop
+                   classifier
+```
 
-- `sim/` — multi-sensor model (radar / passive-RF / EO-IR, missed detections,
-  clutter) + **Threat Library v0** scenarios (single, formation, mixed-dark
-  saturation, 1000-drone scaling).
-- `fusion/` — multi-target tracker: constant-velocity Kalman + GNN association
-  with Mahalanobis gating and M/N confirm/delete (MHT/JPDA stand-in).
-- `sensemaking/` — swarm-intent estimation (clustering + coherence,
-  axis-of-attack, time-to-impact, threat level).
-- `orchestrator/` — weapon-target assignment (area-effector economics),
-  human-on-the-loop authority FSM, tamper-evident hash-chained audit log.
-- `pipeline.py` — wires it together and reports the §10 regression metrics.
+| Vertical | What's actually coded |
+|---|---|
+| **sim** | 7-site sensor mesh: radar (RCS/range Pd + clutter), passive-RF **bearing-only**, EO-IR, acoustic; signature-structured targets; mothership child-release; node-loss injection |
+| **fusion** | 6-state **EKF** fusing Cartesian *and* bearing-only measurements; KD-tree gated GNN association (scales to 1000+); track lifecycle; softmax **classifier** trained on the signature model |
+| **sensemaking** | **DBSCAN** swarm clustering, convex hull, heading coherence, axis-of-attack, time-to-impact distribution, mothership heuristic, class-weighted threat score |
+| **orchestrator** | WTA: KD-tree **max-coverage** area bursts (HPM economics) + greedy optimal point assignment; **Pkill** model; keep-out; engagement-authority **FSM** with human-on-the-loop approval queue; tamper-evident **hash-chained audit** |
+| **mesh** | decentralised pub/sub bus with fault isolation (node failure ≠ system failure) |
+| **server** | FastAPI live COP over **WebSocket** + real approve/deny channel |
+| **web** | zero-build canvas **operator dashboard** (dark ops UI) |
+| **viz** | offline matplotlib COP renderer → PNG + animated GIF |
 
 ## Quickstart
 
 ```bash
 pip install -e ".[dev]"
-pytest -q
-aegis-sim all                 # full Threat Library + metrics
-aegis-sim single_drone --no-mitigation   # commercial detect/track-only build
+pytest -q                                  # 23 regression tests
+aegis-sim all                              # Threat Library + §10 metrics
+aegis-sim coordinated_formation --kill-site radar-N@12   # resilience demo
+aegis-sim single_drone --no-mitigation     # commercial detect/track build
+aegis-serve                                # live COP at http://127.0.0.1:8000
+aegis-render mixed_dark_saturation         # PNG + GIF in examples/
 ```
 
-Headline metrics: detection recall, leakage rate, decision latency, simulated
-cost-per-kill, audit-chain integrity — enforced as regression tests in CI.
+## Validated results (deterministic, seed 0)
 
-## Roadmap
+| Scenario | Threats | Neutralized | Leak | Recall | UAS prec | $/kill | Cycle |
+|---|--:|--:|--:|--:|--:|--:|--:|
+| single_drone | 1 | 1 | 0 | 100% | 100% | $25 | 0.6 ms |
+| coordinated_formation | 8 | 8 | 0 | 100% | 100% | $31 | 0.8 ms |
+| mixed_dark_saturation (3-axis) | 30 | 30 | 0 | 100% | 100% | ~$140 | 2.4 ms |
+| mothership_release (RF-silent) | 11 | 11 | 0 | 100% | 100% | ~$570 | 1.2 ms |
+| **thousand_swarm** | **1000** | **1000** | 0 | 100% | 100% | **~$46** | ~95 ms |
 
-`PLAN.md` is the source of truth (phased: detect/track → decide → effect →
-scale). This slice is Phase 0 + the Phase 1 core; production migrates the
-real-time path to Rust/C++ + ROS 2/DDS on edge compute per `PLAN.md` §3.
+RF-silent / dark targets cost more per kill (no cheap soft-kill) — an honest,
+real-world economics insight, not hidden. `examples/` holds rendered COP
+snapshots and animations.
 
 ## Layout
 
 ```
-src/aegis_mesh/{sim,fusion,sensemaking,orchestrator}/   core
-tests/                                                  regression suite
-redteam/                                                sim-only, safety-gated
-legacy/factor-capacity-monitor/                          archived prior project
+src/aegis_mesh/{sim,fusion,sensemaking,orchestrator,mesh}/   core verticals
+src/aegis_mesh/{engine,pipeline,cli}.py                      closed loop
+src/aegis_mesh/server/  web/                                 live COP
+src/aegis_mesh/viz/     examples/                            offline render
+tests/                                                       23 tests
+legacy/factor-capacity-monitor/                              archived prior project
 ```
+
+`PLAN.md` is the strategy/architecture source of truth; production migrates
+the real-time path to Rust/C++ + ROS 2/DDS per `PLAN.md` §3.

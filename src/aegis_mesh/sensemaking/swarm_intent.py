@@ -1,90 +1,128 @@
 """Swarm-intent estimation — the differentiator (PLAN.md §2.3).
 
-Groups confirmed tracks into swarm-level threat objects by spatial proximity
-and velocity coherence, then estimates axis-of-attack closing speed, minimum
-time-to-impact against the defended asset (origin), and a 0..1 threat level.
+DBSCAN over confirmed UAS tracks (KD-tree neighbourhoods, lone clutter falls
+out as noise), then per-swarm: convex hull, heading coherence, formation
+tightness, axis-of-attack, closing speed, time-to-impact distribution,
+mothership heuristic, and a class-weighted threat score.
 """
 
 from __future__ import annotations
 
 import numpy as np
+from scipy.spatial import ConvexHull, cKDTree
 
 from ..schemas import ObjectClass, SwarmObject, Track
 
 
-def _components(points: np.ndarray, radius: float) -> list[list[int]]:
-    """Single-linkage clusters via union-find within `radius` (m)."""
-    n = len(points)
-    parent = list(range(n))
-
-    def find(a: int) -> int:
-        while parent[a] != a:
-            parent[a] = parent[parent[a]]
-            a = parent[a]
-        return a
-
-    r2 = radius * radius
+def _dbscan(pts: np.ndarray, eps: float, min_samples: int) -> np.ndarray:
+    n = len(pts)
+    labels = np.full(n, -1, dtype=int)
+    if n == 0:
+        return labels
+    tree = cKDTree(pts)
+    neigh = tree.query_ball_point(pts, eps)
+    visited = np.zeros(n, bool)
+    cid = 0
     for i in range(n):
-        for j in range(i + 1, n):
-            d = points[i] - points[j]
-            if d @ d <= r2:
-                parent[find(i)] = find(j)
-    groups: dict[int, list[int]] = {}
-    for i in range(n):
-        groups.setdefault(find(i), []).append(i)
-    return list(groups.values())
+        if visited[i]:
+            continue
+        visited[i] = True
+        if len(neigh[i]) < min_samples:
+            continue
+        labels[i] = cid
+        queue = [j for j in neigh[i] if j != i]
+        qi = 0
+        while qi < len(queue):
+            j = queue[qi]; qi += 1
+            if labels[j] == -1:
+                labels[j] = cid          # border / reachable point
+            if not visited[j]:
+                visited[j] = True
+                if len(neigh[j]) >= min_samples:   # core: expand once
+                    queue.extend(k for k in neigh[j] if not visited[k])
+        cid += 1
+    return labels
+
+
+def _hull_xy(xy: np.ndarray) -> list[tuple[float, float]]:
+    if len(xy) < 3:
+        return [tuple(map(float, p)) for p in xy]
+    try:
+        h = ConvexHull(xy)
+        return [tuple(map(float, xy[v])) for v in h.vertices]
+    except Exception:
+        return [tuple(map(float, p)) for p in xy]
 
 
 def estimate_swarms(tracks: list[Track], t: float,
-                    link_radius: float = 350.0) -> list[SwarmObject]:
-    cand = [tr for tr in tracks
-            if tr.confirmed and tr.obj_class in (ObjectClass.UAS,
-                                                 ObjectClass.UNKNOWN)]
+                    eps: float = 360.0, min_samples: int = 2) -> list[SwarmObject]:
+    cand = [tr for tr in tracks if tr.confirmed
+            and tr.obj_class in (ObjectClass.UAS, ObjectClass.UNKNOWN)]
     if not cand:
         return []
-
     pos = np.array([[c.x, c.y, c.z] for c in cand])
     vel = np.array([[c.vx, c.vy, c.vz] for c in cand])
+    labels = _dbscan(pos, eps, min_samples)
 
     swarms: list[SwarmObject] = []
-    for sid, idxs in enumerate(_components(pos, link_radius)):
-        gp = pos[idxs]
-        gv = vel[idxs]
-        centroid = gp.mean(axis=0)
+    for cid in sorted(set(labels) - {-1}):
+        idx = np.where(labels == cid)[0]
+        gp, gv = pos[idx], vel[idx]
+        centroid = gp.mean(0)
 
-        # velocity coherence: mean pairwise cos-similarity of headings
         speeds = np.linalg.norm(gv, axis=1)
         moving = speeds > 1e-3
         if moving.sum() >= 2:
             u = gv[moving] / speeds[moving][:, None]
             sim = u @ u.T
             m = len(u)
-            coherence = float((sim.sum() - m) / (m * (m - 1)))
+            coherence = float(np.clip((sim.sum() - m) / (m * (m - 1)), 0, 1))
+            axis = u.mean(0)[:2]
+            axis = axis / (np.linalg.norm(axis) + 1e-9)
         else:
-            coherence = 0.0
-        coherence = max(0.0, min(1.0, coherence))
+            coherence, axis = 0.0, np.zeros(2)
 
-        # closing speed toward asset (origin) and time-to-impact
-        rng = np.linalg.norm(centroid)
+        spread = float(np.linalg.norm(gp - centroid, axis=1).mean())
+        tightness = float(np.clip(1.0 - spread / 600.0, 0, 1))
+
+        rng = float(np.linalg.norm(centroid))
         to_asset = -centroid / rng if rng > 1e-6 else np.zeros(3)
-        mean_v = gv.mean(axis=0)
-        closing = float(mean_v @ to_asset)              # +ve = inbound
-        tti = rng / closing if closing > 0.5 else float("inf")
+        closing = float(gv.mean(0) @ to_asset)
+        ranges = np.linalg.norm(gp, axis=1)
+        radial = (gv * to_asset).sum(1)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ttis = np.where(radial > 0.5, ranges / radial, np.inf)
+        min_tti = float(np.min(ttis))
+        med_tti = float(np.median(ttis[np.isfinite(ttis)])) \
+            if np.isfinite(ttis).any() else float("inf")
 
-        n_mem = len(idxs)
-        size_term = min(1.0, n_mem / 12.0)
-        prox_term = max(0.0, 1.0 - rng / 6000.0)
-        urgency = 0.0 if np.isinf(tti) else max(0.0, 1.0 - tti / 120.0)
+        cls_conf = float(np.mean([c.class_prob.get("uas", 0.0)
+                                  for c in (cand[i] for i in idx)]))
+        # mothership: a slow member trailing a faster pack
+        med_sp = float(np.median(speeds)) if len(speeds) else 0.0
+        slow = speeds < 0.45 * med_sp
+        has_mom = bool(len(idx) >= 6 and 1 <= int(slow.sum()) <= 2
+                       and med_sp > 12.0)
+
+        n_mem = len(idx)
+        urgency = 0.0 if not np.isfinite(min_tti) else \
+            max(0.0, 1.0 - min_tti / 120.0)
         threat = float(np.clip(
-            0.35 * size_term + 0.25 * coherence + 0.20 * prox_term
-            + 0.20 * urgency, 0.0, 1.0))
+            0.28 * min(1.0, n_mem / 12.0) + 0.18 * coherence
+            + 0.16 * max(0.0, 1.0 - rng / 6000.0) + 0.20 * urgency
+            + 0.18 * cls_conf, 0, 1))
 
         swarms.append(SwarmObject(
-            swarm_id=sid, t=t,
-            member_track_ids=[cand[i].track_id for i in idxs],
+            swarm_id=int(cid), t=t,
+            member_track_ids=[cand[i].track_id for i in idx],
             centroid=tuple(float(v) for v in centroid),
+            hull_xy=_hull_xy(gp[:, :2]),
             n_members=n_mem, coherence=coherence,
-            closing_speed=closing, min_time_to_impact=tti,
-            threat_level=threat))
+            formation_tightness=tightness,
+            axis_of_attack=(float(axis[0]), float(axis[1])),
+            closing_speed=closing, min_time_to_impact=min_tti,
+            median_time_to_impact=med_tti, has_mothership=has_mom,
+            class_confidence=cls_conf, threat_level=threat))
+
     swarms.sort(key=lambda s: s.threat_level, reverse=True)
     return swarms

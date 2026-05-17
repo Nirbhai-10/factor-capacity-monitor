@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AEGIS-MESH — Counter-Swarm COP</title>
+<link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+<header>
+  <div class="brand">AEGIS&#8209;MESH<span>// counter-swarm common operating picture</span></div>
+  <div class="controls">
+    <select id="scenario"></select>
+    <label class="chk"><input type="checkbox" id="human" /> human-on-loop</label>
+    <label class="chk"><input type="checkbox" id="mitig" checked /> mitigation</label>
+    <button id="start">ENGAGE SIM</button>
+    <span id="conn" class="pill off">offline</span>
+  </div>
+</header>
+
+<main>
+  <canvas id="cop"></canvas>
+
+  <aside id="side">
+    <section class="card">
+      <h3>Mission</h3>
+      <div id="hud" class="hud"></div>
+    </section>
+    <section class="card">
+      <h3>Effectors</h3>
+      <div id="effectors"></div>
+    </section>
+    <section class="card approvals" id="approvalCard" hidden>
+      <h3>Approval Queue <span class="warn">human-on-the-loop</span></h3>
+      <div id="approvals"></div>
+    </section>
+    <section class="card">
+      <h3>Event Log</h3>
+      <div id="log" class="log"></div>
+    </section>
+  </aside>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
