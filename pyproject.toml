@@ -3,32 +3,22 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fcm"
-version = "0.1.0"
-description = "Factor Capacity & Crowding Monitor"
+name = "aegis-mesh"
+version = "0.0.1"
+description = "Counter-swarm defense — autonomy + data OS (reference Phase 0/1 slice)"
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [{ name = "Nirbhai Verma" }]
-license = { text = "MIT" }
+license = { text = "Proprietary" }
 dependencies = [
     "numpy>=1.26",
-    "pandas>=2.1",
     "scipy>=1.11",
-    "pyyaml>=6.0",
-    "matplotlib>=3.8",
-    "plotly>=5.18",
-    "rich>=13.7",
-    "tabulate>=0.9",
 ]
 
 [project.optional-dependencies]
-dashboard = ["streamlit>=1.30"]
-opt = ["cvxpy>=1.4"]
-data = ["yfinance>=0.2.40", "requests>=2.31"]
-dev = ["pytest>=7.4", "pytest-cov", "ruff>=0.1.9", "ipykernel"]
+dev = ["pytest>=7.4", "pytest-cov", "ruff>=0.1.9"]
 
 [project.scripts]
-fcm-demo = "fcm.scripts.run_demo:main"
+aegis-sim = "aegis_mesh.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -36,3 +26,7 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

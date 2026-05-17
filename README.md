@@ -1,55 +1,52 @@
-# Factor Capacity & Crowding Monitor
+# AEGIS-MESH — Counter-Swarm Defense (autonomy + data OS)
 
-A buy-side research tool that estimates **how much money a factor strategy can
-safely manage** before its net Information Ratio collapses, monitors how
-**crowded** that factor has become, and recommends operating policies
-(rebalance frequency, no-trade buffers, hard AUM caps) that maximise the
-strategy's net-of-cost edge as it scales.
+A sensor- and effector-agnostic real-time autonomy + data layer for
+counter-swarm defense. The moat is the autonomy/data flywheel, not the
+hardware (see `PLAN.md`).
 
-This is the second-generation rewrite of an earlier in-house prototype
-(`~/ProjectFactor`). The redesign closes four big gaps in the prior tool:
+> **Defensive only.** Read `SAFETY.md` first — it is a permanent,
+> non-negotiable project boundary. No offensive weaponization; red-team and
+> simulation target only our own synthetic range.
 
-1. **External crowding signals** — valuation spread (Asness), comomentum
-   (Lou-Polk), short-interest pressure, holdings overlap, factor-alpha decay.
-   The prototype only saw *internal* liquidity footprint.
-2. **Multi-factor capacity allocation** — joint capacity across a sleeve of
-   factors, recognising shared positions, solved as a concave program.
-3. **Regime / stress capacity** — capacity reported in calm and stressed
-   regimes (1-in-20 redemption shock, widened spreads, tail vol).
-4. **India / NSE cost stack** — STT, stamp, SEBI, GST on brokerage modelled
-   alongside spread + AC impact.
+## What's here (Phase 0/1 reference slice)
 
-## What you get
+A runnable, tested `sense -> fuse -> sensemake -> decide -> audit` loop driven
+by a synthetic multi-sensor swarm simulation:
 
-| Output | Where |
-|---|---|
-| Capacity curve (Net IR vs AUM) per factor | `examples/demo_output/capacity_curve.html` |
-| Composite crowding score (0–100), 6-component breakdown | `examples/demo_output/crowding_score.html` |
-| Stress capacity table | memo |
-| Recommended rebalance frequency, no-trade buffer, hard AUM cap | memo |
-| PM-style markdown memo | `examples/demo_output/memo.md` |
-| Streamlit dashboard | `streamlit run dashboard/app.py` |
+- `sim/` — multi-sensor model (radar / passive-RF / EO-IR, missed detections,
+  clutter) + **Threat Library v0** scenarios (single, formation, mixed-dark
+  saturation, 1000-drone scaling).
+- `fusion/` — multi-target tracker: constant-velocity Kalman + GNN association
+  with Mahalanobis gating and M/N confirm/delete (MHT/JPDA stand-in).
+- `sensemaking/` — swarm-intent estimation (clustering + coherence,
+  axis-of-attack, time-to-impact, threat level).
+- `orchestrator/` — weapon-target assignment (area-effector economics),
+  human-on-the-loop authority FSM, tamper-evident hash-chained audit log.
+- `pipeline.py` — wires it together and reports the §10 regression metrics.
 
-## Quick start
+## Quickstart
 
 ```bash
-cd FactorCapacityMonitor
-python -m venv .venv && source .venv/bin/activate
-pip install -e .
-python scripts/run_demo.py            # synthetic NIFTY-100-like data, ~10s
-streamlit run dashboard/app.py        # optional, interactive
+pip install -e ".[dev]"
+pytest -q
+aegis-sim all                 # full Threat Library + metrics
+aegis-sim single_drone --no-mitigation   # commercial detect/track-only build
 ```
 
-`run_demo.py` ships a synthetic generator so the full pipeline runs offline.
-For real data, edit `config/default.yaml` to point at NSE Bhavcopy or Yahoo.
+Headline metrics: detection recall, leakage rate, decision latency, simulated
+cost-per-kill, audit-chain integrity — enforced as regression tests in CI.
 
-## Documentation
+## Roadmap
 
-- [docs/RESEARCH.md](docs/RESEARCH.md) — literature, methodology, references
-- [docs/DESIGN.md](docs/DESIGN.md) — module map and conventions
-- [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) — where each input comes from
+`PLAN.md` is the source of truth (phased: detect/track → decide → effect →
+scale). This slice is Phase 0 + the Phase 1 core; production migrates the
+real-time path to Rust/C++ + ROS 2/DDS on edge compute per `PLAN.md` §3.
 
-## Status
+## Layout
 
-Single-author research project. Not production. No real money should hit the
-broker on signals from this code without an institutional execution review.
+```
+src/aegis_mesh/{sim,fusion,sensemaking,orchestrator}/   core
+tests/                                                  regression suite
+redteam/                                                sim-only, safety-gated
+legacy/factor-capacity-monitor/                          archived prior project
+```
