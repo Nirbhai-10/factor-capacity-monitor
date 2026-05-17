@@ -26,13 +26,11 @@ from scipy.spatial import cKDTree
 
 from ..schemas import (EngagementOrder, EngagementState, SwarmObject, Track)
 from .auction import NEG, auction_assign
+from .effectiveness import expected_pkill
 
-_PKILL = {                       # effector_kind -> {class: base Pkill}
-    "soft_kill_cyber": {"*": 0.95},
-    "hpm":            {"uas": 0.92, "*": 0.85},
-    "laser":          {"uas": 0.78, "*": 0.7},
-    "net_interceptor": {"*": 0.88},
-}
+def _range_falloff(rng_m: float, max_range_m: float) -> float:
+    x = rng_m / max_range_m
+    return 1.0 if x <= 0.8 else max(0.35, 1.0 - 3.5 * (x - 0.8))
 
 
 @dataclass
@@ -47,31 +45,38 @@ class Effector:
     min_keepout_m: float = 0.0        # do not engage closer than this to asset
 
     def pkill(self, tr: Track, rng_m: float) -> float:
-        tbl = _PKILL[self.kind]
-        base = tbl.get(tr.obj_class.value, tbl.get("*", 0.6))
-        # high & flat in-envelope, sharp roll-off only past 80% max range
-        x = rng_m / self.max_range_m
-        falloff = 1.0 if x <= 0.8 else max(0.35, 1.0 - 3.5 * (x - 0.8))
-        return base * falloff
+        """Pkill = generation-conditioned effectiveness (marginalised over
+        the *estimated* guidance) x range roll-off. A soft-kill against a
+        track estimated autonomous therefore scores ~0 and is never
+        assigned -> the layered framework routes it to a hard/CA tool."""
+        base = expected_pkill(self.kind, tr.guidance_prob)
+        return base * _range_falloff(rng_m, self.max_range_m)
 
     def applicable(self, tr: Track, rng_m: float) -> bool:
         if self.magazine <= 0 or rng_m > self.max_range_m:
             return False
         if rng_m < self.min_keepout_m:
             return False
-        if self.requires_rf_link and not bool(tr.rf_linked):
+        if self.requires_rf_link and tr.rf_linked is False:
             return False
         return True
 
 
 def default_effector_suite() -> list[Effector]:
+    """Layered defeat: cheap 'older framework' soft-kills (RF/GNSS) + the
+    'newer framework' counter-autonomy + generation-agnostic hard kill."""
     return [
+        # older framework — cheap, only vs RF/GNSS generations
         Effector("cyber-0", "soft_kill_cyber", 5.0, 10**6,
                  requires_rf_link=True, max_range_m=4200.0),
+        Effector("gnss-0", "gnss_spoof", 8.0, 10**6, max_range_m=4500.0),
+        # newer framework — counter-autonomy (works vs RF-silent autonomous)
+        Effector("dazzle-0", "optical_dazzle", 12.0, 10**6,
+                 max_range_m=2200.0),
+        # generation-agnostic hard kill
         Effector("hpm-0", "hpm", 130.0, 220, area_radius=450.0,
                  max_range_m=2700.0),
         Effector("laser-0", "laser", 18.0, 10**6, max_range_m=3200.0),
-        # recoverable net interceptor: consumable net + amortised airframe
         Effector("net-0", "net_interceptor", 350.0, 24,
                  max_range_m=3600.0, min_keepout_m=300.0),
     ]
@@ -111,7 +116,14 @@ class EngagementManager:
         self._oid = 1
         self._busy: dict[int, _Active] = {}      # track_id -> active engagement
         self.pending: dict[int, EngagementOrder] = {}
+        # engage-assess-reengage: effector kinds proven ineffective per track
+        self._ineffective: dict[int, set[str]] = {}
+        self.escalations = 0
         self.committed_total = 0.0
+
+    def mark_ineffective(self, tid: int, kind: str) -> None:
+        self._ineffective.setdefault(tid, set()).add(kind)
+        self.escalations += 1
 
     # ---- helpers ----------------------------------------------------------
     def _rng_to_asset(self, tr: Track) -> float:
@@ -198,6 +210,8 @@ class EngagementManager:
 
         def _eval(tr, e):
             rm = rng_m[tr.track_id]
+            if e.kind in self._ineffective.get(tr.track_id, ()):
+                return None                       # escalation: skip what failed
             if e.magazine <= 0 or not e.applicable(tr, rm):
                 return None
             if rm < self.keepout_m and e.kind == "net_interceptor":
@@ -283,17 +297,22 @@ class EngagementManager:
         return True
 
     # ---- resolution -------------------------------------------------------
-    def resolve_due(self, t: float, rng: np.random.Generator
+    def resolve_due(self, t: float, rng: np.random.Generator, pk_fn=None
                     ) -> list[tuple[EngagementOrder, bool]]:
+        """`pk_fn(order) -> Pkill` lets the engine resolve with the TRUE
+        generation-conditioned effectiveness (engage-assess); without it
+        the planner's estimate is used."""
         out = []
         for tid, act in list(self._busy.items()):
             if t >= act.resolve_t:
-                hit = rng.random() < act.order.pkill
+                pk = pk_fn(act.order) if pk_fn else act.order.pkill
+                hit = rng.random() < pk
                 act.order.state = (EngagementState.NEUTRALIZED if hit
                                    else EngagementState.MISSED)
                 self._emit("resolution", {
                     "t": t, "order_id": act.order.order_id,
-                    "track_id": tid, "result": act.order.state.value})
+                    "track_id": tid, "result": act.order.state.value,
+                    "true_pk": round(pk, 3)})
                 out.append((act.order, hit))
                 del self._busy[tid]
         return out

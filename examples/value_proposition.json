@@ -1,0 +1,59 @@
+{
+  "attacker_unit_cost": 2000.0,
+  "leak_ceiling_pct": 5.0,
+  "saturation_point": 200,
+  "rows": [
+    {
+      "raid": 25,
+      "leakage_pct": 0.0,
+      "defended_pct": 100.0,
+      "autonomous": 6,
+      "auto_defeated": 6,
+      "escalations": 85,
+      "cost_per_kill": 121.0,
+      "defender_spend": 2905.0,
+      "attacker_spend": 50000.0,
+      "cost_exchange": 17.2,
+      "ospa": 72.5
+    },
+    {
+      "raid": 50,
+      "leakage_pct": 0.0,
+      "defended_pct": 100.0,
+      "autonomous": 12,
+      "auto_defeated": 12,
+      "escalations": 159,
+      "cost_per_kill": 88.8,
+      "defender_spend": 4349.0,
+      "attacker_spend": 100000.0,
+      "cost_exchange": 23.0,
+      "ospa": 80.4
+    },
+    {
+      "raid": 100,
+      "leakage_pct": 0.0,
+      "defended_pct": 100.0,
+      "autonomous": 25,
+      "auto_defeated": 25,
+      "escalations": 324,
+      "cost_per_kill": 118.6,
+      "defender_spend": 11860.0,
+      "attacker_spend": 200000.0,
+      "cost_exchange": 16.9,
+      "ospa": 95.6
+    },
+    {
+      "raid": 200,
+      "leakage_pct": 0.0,
+      "defended_pct": 100.0,
+      "autonomous": 50,
+      "auto_defeated": 50,
+      "escalations": 643,
+      "cost_per_kill": 97.0,
+      "defender_spend": 19403.0,
+      "attacker_spend": 400000.0,
+      "cost_exchange": 20.6,
+      "ospa": 115.6
+    }
+  ]
+}

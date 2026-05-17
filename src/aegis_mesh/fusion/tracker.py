@@ -16,7 +16,8 @@ from __future__ import annotations
 import numpy as np
 from scipy.spatial import cKDTree
 
-from ..schemas import (Detection, MeasKind, ObjectClass, Track, TrackStatus)
+from ..schemas import (Detection, GuidanceClass, MeasKind, ObjectClass,
+                       Track, TrackStatus)
 from .classifier import CLASSES, MODEL, featurize
 
 
@@ -151,7 +152,17 @@ class _Tr:
                 and not self._seen):
             self.status = TrackStatus.COASTING
 
+    def _guidance(self):
+        if self.rf_linked:
+            gp = {"rf_remote": 0.6, "gnss_aided": 0.35, "autonomous": 0.05}
+        elif self.rf_linked is False and self.hits >= 4:
+            gp = {"rf_remote": 0.08, "gnss_aided": 0.12, "autonomous": 0.80}
+        else:
+            gp = {"rf_remote": 0.34, "gnss_aided": 0.33, "autonomous": 0.33}
+        return gp
+
     def to_track(self, t) -> Track:
+        gp = self._guidance()
         return Track(
             track_id=self.tid, t=t,
             x=self.x[0], y=self.x[1], z=self.x[2],
@@ -160,7 +171,8 @@ class _Tr:
             hits=self.hits, misses=self.misses, status=self.status,
             score=self.score, obj_class=self.obj_class(),
             class_prob=self.class_prob(), rf_linked=self.rf_linked,
-            rcs=self.rcs, micro_doppler=self.md)
+            rcs=self.rcs, micro_doppler=self.md,
+            guidance=GuidanceClass(max(gp, key=gp.get)), guidance_prob=gp)
 
 
 class Tracker:

@@ -12,6 +12,7 @@ license = { text = "Proprietary" }
 dependencies = [
     "numpy>=1.26",
     "scipy>=1.11",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -26,6 +27,7 @@ aegis-sim = "aegis_mesh.cli:main"
 aegis-serve = "aegis_mesh.server.app:main"
 aegis-render = "aegis_mesh.viz.render:main"
 aegis-export = "aegis_mesh.replay:main"
+aegis-capacity = "aegis_mesh.analysis.capacity:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

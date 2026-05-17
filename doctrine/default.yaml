@@ -1,0 +1,18 @@
+# AEGIS-MESH operator doctrine (edit to operate; falls back to defaults).
+keepout_m: 250            # collateral keep-out ring around the defended asset
+attacker_unit_cost: 2000  # USD per attacking drone (cost-exchange basis)
+
+roe:
+  require_human: false     # true => engagements queue for human approval
+  auto_engage_tti: 12.0    # s; short-fuse threats skip the approval queue
+  engage_threat: 0.30      # TEWA threat floor to commit an effector
+
+# Layered defeat inventory. Cheap "older framework" soft-kills only work on
+# RF/GNSS generations; counter-autonomy + hard kill cover RF-silent autonomy.
+effectors:
+  - {eff_id: cyber-0,  kind: soft_kill_cyber, unit_cost: 5,   magazine: 1000000, requires_rf_link: true,  max_range_m: 4200}
+  - {eff_id: gnss-0,   kind: gnss_spoof,      unit_cost: 8,   magazine: 1000000, max_range_m: 4500}
+  - {eff_id: dazzle-0, kind: optical_dazzle,  unit_cost: 12,  magazine: 1000000, max_range_m: 2200}
+  - {eff_id: hpm-0,    kind: hpm,             unit_cost: 130, magazine: 220, area_radius: 450, max_range_m: 2700}
+  - {eff_id: laser-0,  kind: laser,           unit_cost: 18,  magazine: 1000000, max_range_m: 3200}
+  - {eff_id: net-0,    kind: net_interceptor, unit_cost: 350, magazine: 24,  max_range_m: 3600, min_keepout_m: 300}

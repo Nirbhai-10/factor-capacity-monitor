@@ -88,8 +88,11 @@ def _draw(ax, tx, f):
             ax.scatter([o["xy"][0]], [o["xy"][1]], s=90,
                        facecolors="none", edgecolors="#ffffff", lw=1.2)
 
+    GUID = {"rf_remote": "#ff4d5e", "gnss_aided": "#ff9f1c",
+            "autonomous": "#ff3df0", "unknown": "#ffc24b"}
     for t in f["tracks"]:
-        col = CLS.get(t["cls"], "#888")
+        col = (GUID.get(t.get("guid"), "#ff4d5e") if t["cls"] == "uas"
+               else CLS.get(t["cls"], "#888"))
         ax.plot([t["x"], t["x"] + t["vx"] * 6],
                 [t["y"], t["y"] + t["vy"] * 6], color=col, lw=0.6, alpha=0.5)
         mk = "D" if t["cls"] == "uas" else "o"

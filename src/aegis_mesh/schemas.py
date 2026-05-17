@@ -34,6 +34,25 @@ class ObjectClass(str, Enum):
     UNKNOWN = "unknown"
 
 
+class GuidanceClass(str, Enum):
+    """Drone autonomy generation — determines which defeat mechanisms work.
+
+    RF_REMOTE  (Gen-1): manual RF link, GNSS-dependent. Defeated by RF
+               jam / GNSS spoof / RF-cyber take-over (cheap soft-kill).
+    GNSS_AIDED (Gen-2): RF + autonomous waypoints but GNSS-reliant. GNSS
+               spoof effective; RF jam only partial.
+    AUTONOMOUS (Gen-3): RF-silent / fibre-optic / SATCOM, visual-inertial
+               or SLAM nav, GNSS-independent. RF/GNSS EW is INEFFECTIVE —
+               requires HPM / laser / net / kinetic or counter-autonomy
+               (optical) defeat. This is the threat older frameworks miss.
+    """
+
+    RF_REMOTE = "rf_remote"
+    GNSS_AIDED = "gnss_aided"
+    AUTONOMOUS = "autonomous"
+    UNKNOWN = "unknown"
+
+
 class TrackStatus(str, Enum):
     TENTATIVE = "tentative"
     CONFIRMED = "confirmed"
@@ -101,6 +120,8 @@ class Track:
     rf_linked: Optional[bool] = None
     rcs: float = 0.0
     micro_doppler: float = 0.0
+    guidance: "GuidanceClass" = GuidanceClass.UNKNOWN
+    guidance_prob: dict[str, float] = field(default_factory=dict)
 
     @property
     def confirmed(self) -> bool:

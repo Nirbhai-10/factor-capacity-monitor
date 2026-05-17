@@ -8,6 +8,7 @@ sensor-node-loss injection to demonstrate graceful degradation.
 from __future__ import annotations
 
 import time
+from copy import deepcopy
 from dataclasses import dataclass
 
 import numpy as np
@@ -16,8 +17,11 @@ from .fusion.gmphd import GMPHDTracker
 from .fusion.tracker import Tracker
 from .mesh import EventBus
 from .orchestrator.audit import AuditLog
-from .orchestrator.wta import EngagementManager
-from .schemas import EngagementState, ObjectClass, TrackStatus, jsonable
+from .orchestrator.effectiveness import base_pkill, is_soft_kill
+from .orchestrator.wta import EngagementManager, _range_falloff
+from .metrics.ospa import ospa
+from .schemas import (EngagementState, GuidanceClass, ObjectClass,
+                      TrackStatus, jsonable)
 from .sensemaking.swarm_intent import estimate_swarms
 from .sim.scenarios import Scenario
 from .sim.sensors import SimWorld, default_site_layout
@@ -37,14 +41,21 @@ class Metrics:
     committed_cost: float = 0.0
     sim_cost_per_kill: float = 0.0
     active_sites: int = 0
+    n_autonomous: int = 0
+    autonomous_neutralized: int = 0
+    escalations: int = 0
+    ospa: float = 0.0
     audit_ok: bool = True
     audit_records: int = 0
 
     def summary(self) -> str:
         return (f"[{self.scenario}] threats={self.n_threats} "
                 f"neutralized={self.n_neutralized} leaked={self.n_leaked} "
+                f"auto={self.autonomous_neutralized}/{self.n_autonomous} "
+                f"escal={self.escalations} "
                 f"leakage={self.leakage_rate:.1%} recall={self.detection_recall:.1%} "
                 f"uas_prec={self.uas_precision:.1%} "
+                f"OSPA={self.ospa:.0f} "
                 f"lat={self.mean_cycle_latency_ms:.1f}ms "
                 f"$/kill={self.sim_cost_per_kill:,.0f} "
                 f"sites={self.active_sites} "
@@ -56,7 +67,8 @@ class Engine:
                  mitigation_authorized: bool = True, require_human: bool = False,
                  node_loss: dict[float, str] | None = None,
                  bus: EventBus | None = None, assoc_m: float = 200.0,
-                 leak_radius_m: float = 250.0, tracker: str = "gmphd"):
+                 leak_radius_m: float = 250.0, tracker: str = "gmphd",
+                 doctrine=None):
         self.sc = scenario
         self.rng = np.random.default_rng(seed + 101)
         self.world = SimWorld(scenario, seed=seed)
@@ -64,9 +76,21 @@ class Engine:
         self.tracker_kind = tracker
         self.tracker = GMPHDTracker() if tracker == "gmphd" else Tracker()
         self.audit = AuditLog()
-        self.mgr = EngagementManager(
-            mitigation_authorized=mitigation_authorized,
-            require_human=require_human, audit=self.audit)
+        self.doctrine = doctrine
+        if doctrine is not None:
+            require_human = doctrine.require_human
+            leak_radius_m = doctrine.keepout_m
+            self.mgr = EngagementManager(
+                effectors=[deepcopy(e) for e in doctrine.effectors],
+                mitigation_authorized=mitigation_authorized,
+                require_human=require_human,
+                auto_engage_tti=doctrine.auto_engage_tti,
+                engage_threat=doctrine.engage_threat,
+                keepout_m=doctrine.keepout_m, audit=self.audit)
+        else:
+            self.mgr = EngagementManager(
+                mitigation_authorized=mitigation_authorized,
+                require_human=require_human, audit=self.audit)
         self.bus = bus or EventBus()
         self.assoc_m = assoc_m
         self.leak_radius_m = leak_radius_m
@@ -80,6 +104,8 @@ class Engine:
         self._ever = None
         self._lat: list[float] = []
         self._uas_tp = self._uas_fp = 0
+        self._ospa_sum = 0.0
+        self._ospa_n = 0
         self._step = 0
         self.steps = int(scenario.duration_s / scenario.dt)
         self.done = False
@@ -113,7 +139,32 @@ class Engine:
         swarms = estimate_swarms(tracks, self.world.t)
         self.bus.publish("swarms", swarms)
         wta = self.mgr.propose(swarms, tracks, self.world.t)
-        resolved = self.mgr.resolve_due(self.world.t, self.rng)
+
+        # engage-assess-reengage: resolve with the TRUE generation-
+        # conditioned effectiveness, so a soft-kill on an autonomous
+        # (RF-silent) drone has ~0 Pkill and is detected as ineffective.
+        tby = {x.track_id: x for x in tracks}
+        kind_rng = {e.kind: e.max_range_m for e in self.mgr.effectors}
+
+        def _truth_idx(order):
+            tr = tby.get(order.target_track_id)
+            if tr is None or not self.world.n:
+                return -1
+            d = np.linalg.norm(self.world.pos - [tr.x, tr.y, tr.z], axis=1)
+            jj = int(np.argmin(d))
+            return jj if d[jj] <= self.assoc_m else -1
+
+        def _true_pk(order):
+            jj = _truth_idx(order)
+            if jj < 0:
+                return 0.0
+            g = self.world.guid[jj]
+            rngm = float(np.hypot(self.world.pos[jj][0],
+                                  self.world.pos[jj][1]))
+            return base_pkill(order.effector_kind, g) * _range_falloff(
+                rngm, kind_rng.get(order.effector_kind, 4000.0))
+
+        resolved = self.mgr.resolve_due(self.world.t, self.rng, _true_pk)
         self._lat.append((time.perf_counter() - t0) * 1000.0)
         self.bus.publish("orders", wta.orders)
 
@@ -131,18 +182,32 @@ class Engine:
                     else:
                         self._uas_fp += 1
 
-        # apply authority-gated, resolved effects to truth
-        tby = {x.track_id: x for x in tracks}
+        # OSPA(c,p) — confirmed tracks vs. alive threat truth (xy)
+        est = np.array([[tr.x, tr.y] for tr in tracks if tr.confirmed
+                        and tr.obj_class == ObjectClass.UAS])
+        gt = truth[(alive) & self.world.is_threat][:, :2] \
+            if self.world.n else np.zeros((0, 2))
+        o, _, _ = ospa(est if len(est) else np.zeros((0, 2)), gt)
+        self._ospa_sum += o
+        self._ospa_n += 1
+
+        # apply resolved effects + engage-assess escalation
         for order, hit in resolved:
-            if order.state != EngagementState.NEUTRALIZED:
-                continue
-            tr = tby.get(order.target_track_id)
-            if tr is None:
-                continue
-            d = np.linalg.norm(self.world.pos - [tr.x, tr.y, tr.z], axis=1)
-            jj = int(np.argmin(d)) if self.world.n else -1
-            if jj >= 0 and d[jj] <= self.assoc_m:
-                self.world.neutralize(jj)
+            jj = _truth_idx(order)
+            if hit and order.state == EngagementState.NEUTRALIZED:
+                if jj >= 0:
+                    self.world.neutralize(jj)
+            elif is_soft_kill(order.effector_kind):
+                # a soft-kill with no effect is strong evidence the drone
+                # is RF-silent/autonomous: re-classify (probe) and bar that
+                # mechanism so the planner escalates to a hard/CA defeat.
+                tid = order.target_track_id
+                if hasattr(self.tracker, "apply_probe"):
+                    self.tracker.apply_probe(tid)
+                self.mgr.mark_ineffective(tid, order.effector_kind)
+                self.audit.append(self.world.t, "escalation", {
+                    "track_id": tid, "failed": order.effector_kind,
+                    "reason": "no_effect_autonomous"})
 
         # leakage
         rng_a = self.world.range_to_asset()
@@ -180,6 +245,13 @@ class Engine:
         m.sim_cost_per_kill = round(
             m.committed_cost / m.n_neutralized, 1) if m.n_neutralized else 0.0
         m.active_sites = len(self._active)
+        auto = np.array([g == GuidanceClass.AUTONOMOUS
+                         for g in self.world.guid], dtype=bool)
+        athr = auto & self.world.is_threat
+        m.n_autonomous = int(athr.sum())
+        m.autonomous_neutralized = int((athr & self.world.neutralized).sum())
+        m.escalations = self.mgr.escalations
+        m.ospa = round(self._ospa_sum / max(self._ospa_n, 1), 1)
         if self.done or self._step % 25 == 0:
             m.audit_ok = self.audit.verify()
         m.audit_records = len(self.audit.records)
@@ -200,7 +272,8 @@ class Engine:
                         "vx": round(tr.vx, 1), "vy": round(tr.vy, 1),
                         "cls": tr.obj_class.value, "puas":
                         round(tr.class_prob.get("uas", 0.0), 2),
-                        "status": tr.status.value, "rf": tr.rf_linked}
+                        "status": tr.status.value, "rf": tr.rf_linked,
+                        "guid": tr.guidance.value}
                        for tr in tracks if tr.status in keep],
             "swarms": [{"id": s.swarm_id, "n": s.n_members,
                         "threat": round(s.threat_level, 2),

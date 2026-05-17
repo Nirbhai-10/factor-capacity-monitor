@@ -82,9 +82,12 @@ function order(o){
   if(o.state==="neutralized"){cx.strokeStyle="#fff";
     cx.beginPath();cx.arc(ex,ey,9*devicePixelRatio,0,7);cx.stroke();}
 }
+const GUID={rf_remote:"#ff4d5e",gnss_aided:"#ff9f1c",
+  autonomous:"#ff3df0",unknown:"#ffc24b"};
 function track(t){
   if(!LAYERS.tracks)return;
-  const px=X(t.x),py=Y(t.y),c=CLS[t.cls]||"#888";
+  const px=X(t.x),py=Y(t.y);
+  const c=t.cls==="uas"?(GUID[t.guid]||CLS.uas):(CLS[t.cls]||"#888");
   if(LAYERS.leaders&&(t.vx||t.vy)){
     cx.strokeStyle=c;cx.globalAlpha=0.45;cx.beginPath();
     cx.moveTo(px,py);cx.lineTo(X(t.x+t.vx*6),Y(t.y+t.vy*6));
@@ -120,9 +123,11 @@ function kpis(f){
     card(m.n_neutralized??0,"neutralized","good")+
     card(m.n_leaked??0,"leaked",(m.n_leaked>0)?"bad":"")+
     card(pct(m.detection_recall),"recall")+
-    card(pct(m.uas_precision),"UAS prec")+
+    card(`${m.autonomous_neutralized??0}/${m.n_autonomous??0}`,
+         "autonomous","good")+
+    card(m.escalations??0,"escalations")+
+    card((m.ospa??0).toFixed(0)+"m","OSPA")+
     card("$"+Math.round(m.sim_cost_per_kill??0),"$/kill")+
-    card((m.mean_cycle_latency_ms??0).toFixed(0)+"ms","cycle")+
     card(m.audit_ok?"OK":"BROKEN","audit",m.audit_ok?"good":"bad");
 }
 function pipe(f){
@@ -133,6 +138,8 @@ function pipe(f){
     row("active sensors",(m.active_sites??0)+"/7")+
     row("swarms",(f.swarms||[]).length)+
     row("tracks",(f.tracks||[]).length)+
+    row("recall",pct(m.detection_recall))+
+    row("UAS precision",pct(m.uas_precision))+
     row("committed $",Math.round(m.committed_cost??0));
 }
 function effectors(f){
@@ -200,9 +207,11 @@ async function boot(){
   el("layers").querySelectorAll("input").forEach((c)=>c.onchange=()=>{
     LAYERS[c.dataset.l]=c.checked?1:0;if(frames[fi])draw(frames[fi]);});
   el("legend").innerHTML=[
-    ["#ff4d5e","UAS / hostile"],["#ffc24b","unknown"],
-    ["#5b7384","bird / decoy"],["#27e0c4","cyber take-over"],
-    ["#b07bff","HPM area burst"],["#ff7a45","laser"],
+    ["#ff4d5e","RF-remote drone (soft-kill works)"],
+    ["#ff9f1c","GNSS-aided drone"],
+    ["#ff3df0","RF-silent AUTONOMOUS (escalate)"],
+    ["#5b7384","bird / decoy"],["#27e0c4","cyber / GNSS soft-kill"],
+    ["#b07bff","HPM area burst"],["#ff7a45","laser / dazzle"],
     ["#54d98c","net interceptor"]].map(([c,t])=>
     `<div><span class="dot" style="background:${c}"></span>${t}</div>`)
     .join("");

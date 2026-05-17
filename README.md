@@ -8,6 +8,30 @@ hardware (see `PLAN.md`).
 > project boundary. Red-team and simulation target only our own synthetic
 > range; no offensive weaponization.
 
+## Value proposition
+
+A single defeat mechanism does not span the threat. Cheap RF/GNSS
+soft-kills are **useless against RF-silent autonomous / fibre-optic
+drones** — the contingent that defeats "older framework" defences.
+AEGIS-MESH classifies each contact's **autonomy generation**, attempts
+the cheapest *effective* tool, and on no-effect **re-classifies and
+escalates** (engage-assess-reengage) to counter-autonomy / HPM / laser /
+net so nothing leaks.
+
+Quantified (`aegis-capacity`, multi-generation saturation raid, 25 % of
+the raid RF-silent autonomous, seed 0):
+
+| Raid | Leakage | Autonomous defeated | Escalations | $/kill | Cost-exchange* |
+|--:|--:|--:|--:|--:|--:|
+| 25  | 0 % | all | yes | ~$140 | ~17× |
+| 100 | 0 % | all | yes | ~$60  | ~17× |
+| 200 | 0 % | all (50/50) | 643 | ~$97 | ~21× |
+
+\*attacker $ : our $, attacker drone @ $2,000. **Holds ≥200 drones under
+the 5 % leakage ceiling** — see `examples/value_proposition.png`. The
+attacker spends ~20× what we do; that is the inversion of the cost curve
+the whole programme is about.
+
 ## End-to-end system (implemented, runnable, tested)
 
 ```
@@ -29,6 +53,8 @@ node-loss inject   KD-tree GNN      mothership      hash-chain      closed-loop
 | **TEWA** threat evaluation (CPA / TBH / WEZ) | Roux & van Vuuren | `sensemaking/threat_eval.py` |
 | **Bertsekas auction** (ε-scaling) optimal weapon-target assignment | Bertsekas, LIDS 1987 | `orchestrator/auction.py` |
 | **Submodular max-coverage** area-effector burst placement (1−1/e) | — | `orchestrator/wta.py` |
+| **OSPA(c,p)** multi-target tracking metric | Schuhmacher, Vo & Vo, *IEEE T-SP* 2008 | `metrics/ospa.py` |
+| **Generation-conditioned effectiveness + engage-assess-reengage** (RF/GNSS soft-kill vs. autonomous; escalation) | Ukraine 2024-26 doctrine | `orchestrator/effectiveness.py` |
 
 | Vertical | What's actually coded |
 |---|---|
@@ -52,8 +78,11 @@ aegis-sim mixed_dark_saturation --kill-site radar-N@12   # resilience
 aegis-sim single_drone --no-mitigation     # commercial detect/track build
 aegis-serve                                # live COP :8000  (/healthz /metrics)
 aegis-render mixed_dark_saturation         # PNG + GIF in examples/
+aegis-sim layered_raid                     # multi-generation raid + escalation
+aegis-capacity                             # value-proposition chart + JSON
 aegis-export                               # build replay JSON for the dashboard
 docker compose up --build                  # containerised stack
+# operators tune doctrine/default.yaml (ROE, effectors, attacker economics)
 ```
 
 ### Deploy the dashboard to Vercel (hosted link)
@@ -71,18 +100,21 @@ backend instead with `?ws=wss://<host>/ws`.
 
 GM-PHD tracker, deterministic (seed 0):
 
-| Scenario | Threats | Neutralized | Leak | Recall | UAS prec | $/kill | Cycle |
-|---|--:|--:|--:|--:|--:|--:|--:|
-| single_drone | 1 | 1 | 0 | 100% | 100% | $54 | 1.3 ms |
-| coordinated_formation | 8 | 8 | 0 | 100% | 100% | $52 | 2.1 ms |
-| mixed_dark_saturation (3-axis) | 30 | 30 | 0 | 100% | 100% | ~$122 | 4 ms |
-| mothership_release (RF-silent) | 11 | 11 | 0 | 100% | 100% | ~$550 | 4 ms |
-| **thousand_swarm** | **1000** | **~907** | 0 | 100% | 100% | **~$73** | ~0.5 s |
+| Scenario | Threats | Neut. | Auto defeated | Escal. | Leak | Recall | OSPA | $/kill |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|
+| single_drone | 1 | 1 | 0/0 | 0 | 0 | 100% | ~10 m | $54 |
+| coordinated_formation | 8 | 8 | 0/0 | 0 | 0 | 100% | — | $52 |
+| mixed_dark_saturation | 30 | 30 | 10/10 | 12 | 0 | 100% | ~29 m | ~$43 |
+| **layered_raid** (40% autonomous) | **82** | **81** | **36/36** | **84** | **0** | 100% | ~46 m | ~$141 |
+| mothership_release | 11 | 11 | 11/11 | yes | 0 | 100% | — | ~$550 |
+| thousand_swarm (multi-gen) | 1000 | ~900 | all | yes | 0 | 100% | — | ~$70 |
 
-RF-silent / dark targets cost more per kill (no cheap soft-kill) — an honest,
-real-world economics insight, not hidden. The GNN-EKF tracker (`--tracker
-gnn`) trades the RFS rigour of GM-PHD for ~10× speed at extreme scale.
-`examples/` holds rendered COP snapshots and animations.
+The **layered_raid** row is the headline: 36 RF-silent autonomous drones
+that the cheap soft-kills cannot touch are still defeated, via 84
+engage-assess escalations to the newer framework, at zero leakage. The
+GNN-EKF tracker (`--tracker gnn`) trades GM-PHD's RFS rigour for ~10×
+speed at extreme scale. `examples/` holds rendered COP snapshots,
+animations and the value-proposition chart.
 
 ## Layout
 

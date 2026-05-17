@@ -25,7 +25,9 @@ from dataclasses import dataclass, field
 import numpy as np
 from scipy.spatial import cKDTree
 
-from ..schemas import (Detection, MeasKind, ObjectClass, Track, TrackStatus)
+from ..schemas import (Detection, GuidanceClass, MeasKind, ObjectClass,
+                       Track, TrackStatus)
+from ..schemas import GuidanceClass as G
 from .classifier import CLASSES, MODEL, featurize
 from .localization import aoa_triangulate
 
@@ -63,6 +65,9 @@ class _Label:
     rcs: float = 0.0
     md: float = 0.0
     logp: np.ndarray = field(default_factory=lambda: np.zeros(len(CLASSES)))
+    rf_hits: int = 0          # frames an RF link was observed
+    obs: int = 0              # frames observed (for guidance inference)
+    auto_bias: float = 0.0    # external evidence toward AUTONOMOUS (probe)
 
 
 class GMPHDTracker:
@@ -262,8 +267,11 @@ class GMPHDTracker:
         if d[j] > 180.0:
             return
         rf, md, rcs, _hint = feat[j]
+        lb.obs += 1
         if rf is not None:
             lb.rf = rf
+            if rf:
+                lb.rf_hits += 1
         lb.md = 0.7 * lb.md + 0.3 * md if lb.md else md
         if rcs > 0:
             lb.rcs = 0.7 * lb.rcs + 0.3 * rcs if lb.rcs else rcs
@@ -274,6 +282,27 @@ class GMPHDTracker:
         lb.logp += np.log(np.array([pr[c.value] for c in CLASSES]) + 1e-9)
         lb.logp -= lb.logp.max()
 
+    def apply_probe(self, tid: int, toward_autonomous: float = 2.5) -> None:
+        """External evidence from engage-assess: a soft-kill that had no
+        effect is strong evidence the track is RF-silent / autonomous."""
+        lb = self.labels.get(tid)
+        if lb is not None:
+            lb.auto_bias += toward_autonomous
+
+    def _guidance(self, lb: _Label) -> dict[str, float]:
+        rfr = lb.rf_hits / max(lb.obs, 1)
+        silent = 1.0 - rfr
+        s_rf = 2.4 * rfr
+        s_gnss = 1.0 * rfr + 0.4
+        s_auto = 2.2 * silent + lb.auto_bias + (
+            0.6 if (lb.obs >= 5 and lb.rf_hits == 0) else 0.0)
+        z = np.array([s_rf, s_gnss, s_auto])
+        z = np.exp(z - z.max())
+        z /= z.sum()
+        return {G.RF_REMOTE.value: float(z[0]),
+                G.GNSS_AIDED.value: float(z[1]),
+                G.AUTONOMOUS.value: float(z[2])}
+
     def _emit(self, t) -> list[Track]:
         out = []
         for lb in self.labels.values():
@@ -281,6 +310,7 @@ class GMPHDTracker:
             p = p / p.sum() if p.sum() else np.ones(len(CLASSES)) / len(CLASSES)
             cp = {CLASSES[i].value: float(p[i]) for i in range(len(CLASSES))}
             oc = ObjectClass(max(cp, key=cp.get))
+            gp = self._guidance(lb)
             out.append(Track(
                 track_id=lb.tid, t=t,
                 x=lb.m[0], y=lb.m[1], z=lb.m[2],
@@ -288,7 +318,9 @@ class GMPHDTracker:
                 pos_cov=float(np.trace(lb.P[:3, :3]) / 3.0),
                 hits=lb.age, misses=lb.missed, status=lb.status,
                 score=lb.age - lb.missed, obj_class=oc, class_prob=cp,
-                rf_linked=lb.rf, rcs=lb.rcs, micro_doppler=lb.md))
+                rf_linked=lb.rf, rcs=lb.rcs, micro_doppler=lb.md,
+                guidance=GuidanceClass(max(gp, key=gp.get)),
+                guidance_prob=gp))
         return out
 
     @property

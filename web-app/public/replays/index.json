@@ -12,14 +12,18 @@
       "leakage_rate": 0.0,
       "detection_recall": 1.0,
       "uas_precision": 1.0,
-      "mean_cycle_latency_ms": 1.2713658083328028,
+      "mean_cycle_latency_ms": 1.4636983249867324,
       "committed_cost": 54.0,
       "sim_cost_per_kill": 54.0,
       "active_sites": 7,
+      "n_autonomous": 0,
+      "autonomous_neutralized": 0,
+      "escalations": 0,
+      "ospa": 10.5,
       "audit_ok": true,
       "audit_records": 7
     },
-    "bytes": 145100
+    "bytes": 166458
   },
   {
     "scenario": "coordinated_formation",
@@ -34,18 +38,22 @@
       "leakage_rate": 0.0,
       "detection_recall": 1.0,
       "uas_precision": 1.0,
-      "mean_cycle_latency_ms": 1.6052294285681714,
-      "committed_cost": 450.0,
-      "sim_cost_per_kill": 56.2,
+      "mean_cycle_latency_ms": 1.7845357214192907,
+      "committed_cost": 184.0,
+      "sim_cost_per_kill": 23.0,
       "active_sites": 7,
+      "n_autonomous": 0,
+      "autonomous_neutralized": 0,
+      "escalations": 0,
+      "ospa": 12.5,
       "audit_ok": true,
-      "audit_records": 51
+      "audit_records": 33
     },
-    "bytes": 212243
+    "bytes": 217542
   },
   {
     "scenario": "mixed_dark_saturation",
-    "description": "30-threat 3-axis coordinated raid (RF + dark) + 4 bird decoys.",
+    "description": "30-threat 3-axis raid: RF-remote + GNSS-aided + RF-silent autonomous + 4 bird decoys.",
     "frames": 160,
     "metrics": {
       "scenario": "mixed_dark_saturation",
@@ -56,18 +64,48 @@
       "leakage_rate": 0.0,
       "detection_recall": 1.0,
       "uas_precision": 1.0,
-      "mean_cycle_latency_ms": 4.1263862124978345,
-      "committed_cost": 3666.0,
-      "sim_cost_per_kill": 122.2,
+      "mean_cycle_latency_ms": 4.35587421875141,
+      "committed_cost": 1281.0,
+      "sim_cost_per_kill": 42.7,
       "active_sites": 7,
+      "n_autonomous": 10,
+      "autonomous_neutralized": 10,
+      "escalations": 12,
+      "ospa": 28.8,
       "audit_ok": true,
-      "audit_records": 187
+      "audit_records": 183
     },
-    "bytes": 419233
+    "bytes": 449028
+  },
+  {
+    "scenario": "layered_raid",
+    "description": "~88-threat multi-generation saturation raid (40% RF-silent autonomous) + 6 decoys.",
+    "frames": 190,
+    "metrics": {
+      "scenario": "layered_raid",
+      "t": 95.0,
+      "n_threats": 82,
+      "n_neutralized": 81,
+      "n_leaked": 0,
+      "leakage_rate": 0.0,
+      "detection_recall": 1.0,
+      "uas_precision": 1.0,
+      "mean_cycle_latency_ms": 10.7568135841934,
+      "committed_cost": 11431.0,
+      "sim_cost_per_kill": 141.1,
+      "active_sites": 7,
+      "n_autonomous": 36,
+      "autonomous_neutralized": 36,
+      "escalations": 84,
+      "ospa": 45.5,
+      "audit_ok": true,
+      "audit_records": 623
+    },
+    "bytes": 950901
   },
   {
     "scenario": "mothership_release",
-    "description": "RF-silent mothership ingress then 10-child quad release.",
+    "description": "RF-silent autonomous mothership then 10-child release.",
     "frames": 180,
     "metrics": {
       "scenario": "mothership_release",
@@ -78,35 +116,43 @@
       "leakage_rate": 0.0,
       "detection_recall": 1.0,
       "uas_precision": 1.0,
-      "mean_cycle_latency_ms": 2.9865927111094,
-      "committed_cost": 6132.0,
-      "sim_cost_per_kill": 557.5,
+      "mean_cycle_latency_ms": 2.394221005551521,
+      "committed_cost": 929.0,
+      "sim_cost_per_kill": 84.5,
       "active_sites": 7,
+      "n_autonomous": 1,
+      "autonomous_neutralized": 1,
+      "escalations": 7,
+      "ospa": 38.7,
       "audit_ok": true,
-      "audit_records": 95
+      "audit_records": 62
     },
-    "bytes": 299037
+    "bytes": 306626
   },
   {
     "scenario": "thousand_swarm",
-    "description": "1000-drone mass raid for scaling validation.",
+    "description": "1000-drone multi-generation mass raid (scaling).",
     "frames": 30,
     "metrics": {
       "scenario": "thousand_swarm_1000",
       "t": 60.0,
       "n_threats": 1000,
-      "n_neutralized": 907,
+      "n_neutralized": 982,
       "n_leaked": 0,
       "leakage_rate": 0.0,
       "detection_recall": 1.0,
       "uas_precision": 1.0,
-      "mean_cycle_latency_ms": 571.5516709166689,
-      "committed_cost": 66510.0,
-      "sim_cost_per_kill": 73.3,
+      "mean_cycle_latency_ms": 678.8345587666603,
+      "committed_cost": 41516.0,
+      "sim_cost_per_kill": 42.3,
       "active_sites": 7,
+      "n_autonomous": 250,
+      "autonomous_neutralized": 250,
+      "escalations": 1179,
+      "ospa": 88.2,
       "audit_ok": true,
-      "audit_records": 6724
+      "audit_records": 7755
     },
-    "bytes": 2385968
+    "bytes": 1817764
   }
 ]

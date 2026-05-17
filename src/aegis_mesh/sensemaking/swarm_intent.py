@@ -100,11 +100,22 @@ def estimate_swarms(tracks: list[Track], t: float, eps: float = 360.0,
 
         cls_conf = float(np.mean([c.class_prob.get("uas", 0.0)
                                   for c in (cand[i] for i in idx)]))
-        # mothership: a slow member trailing a faster pack
+        # mothership: exactly one member that is both markedly SLOW and
+        # the REAR-MOST along the attack axis (a real carrier trails its
+        # children) — geometric test kills false positives on uniform
+        # ingress clusters.
         med_sp = float(np.median(speeds)) if len(speeds) else 0.0
-        slow = speeds < 0.45 * med_sp
-        has_mom = bool(len(idx) >= 6 and 1 <= int(slow.sum()) <= 2
-                       and med_sp > 12.0)
+        has_mom = False
+        if 4 <= len(idx) <= 16 and med_sp > 14.0:
+            slow = np.where(speeds < 0.30 * med_sp)[0]
+            if len(slow) == 1:
+                axis3 = np.array([axis[0], axis[1], 0.0])
+                proj = (gp - centroid) @ (-axis3)   # +ve = behind the pack
+                k = int(slow[0])
+                rear = proj[k]
+                others = np.delete(proj, k)
+                has_mom = bool(rear == proj.max()
+                               and rear - others.max() > spread)
 
         n_mem = len(idx)
         # TEWA per-member threat (CPA/TBH/range/class), aggregated and

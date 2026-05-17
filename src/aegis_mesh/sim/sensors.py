@@ -17,7 +17,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..schemas import Detection, MeasKind, ObjectClass, SensorKind
+from ..schemas import (Detection, GuidanceClass, MeasKind, ObjectClass,
+                       SensorKind)
 from .scenarios import Scenario, ThreatSpec
 
 
@@ -55,6 +56,7 @@ class SimWorld:
         self.vel = np.array([t.velocity_toward_origin() for t in threats],
                             dtype=float)
         self.rf = np.array([t.rf_linked for t in threats], dtype=bool)
+        self.guid = [t.guidance for t in threats]
         self.jit = np.array([t.jitter for t in threats], dtype=float)
         self.rcs = np.array([t.rcs for t in threats], dtype=float)
         self.md = np.array([t.micro_doppler for t in threats], dtype=float)
@@ -82,14 +84,15 @@ class SimWorld:
             ang = 2 * np.pi * k / 10
             off = np.array([60 * np.cos(ang), 60 * np.sin(ang),
                             rng.uniform(-20, 20)])
-            sp = ThreatSpec(p0=p + off, speed=26.0, rf_linked=True,
-                            kind="quad")
+            sp = ThreatSpec(p0=p + off, speed=26.0,
+                            guidance=GuidanceClass.RF_REMOTE, kind="quad")
             new.append(sp)
         # append children to truth arrays
         self.specs += new
         self.pos = np.vstack([self.pos, [s.p0 for s in new]])
         cv = np.array([s.velocity_toward_origin() for s in new])
         self.vel = np.vstack([self.vel, cv])
+        self.guid += [s.guidance for s in new]
         self.rf = np.concatenate([self.rf, np.ones(len(new), bool)])
         self.jit = np.concatenate([self.jit, [s.jitter for s in new]])
         self.rcs = np.concatenate([self.rcs, [s.rcs for s in new]])

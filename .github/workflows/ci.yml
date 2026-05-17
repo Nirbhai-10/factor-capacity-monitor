@@ -29,3 +29,7 @@ jobs:
         run: aegis-export --scenario coordinated_formation
       - name: Smoke — server health/metrics import
         run: python -c "from aegis_mesh.server.app import app; print('ok')"
+      - name: Smoke — multi-generation raid + escalation
+        run: aegis-sim layered_raid
+      - name: Smoke — value-proposition capacity study
+        run: aegis-capacity --sizes 25,50 --out /tmp/vp.png
